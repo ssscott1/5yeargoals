@@ -52,6 +52,7 @@ async function sendTelegramMessage(chatId, text) {
 }
 
 export const handler = async (event) => {
+  console.log('[telegram-webhook] handler invoked, method:', event.httpMethod)
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' }
   }
