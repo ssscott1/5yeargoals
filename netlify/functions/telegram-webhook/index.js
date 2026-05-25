@@ -1,4 +1,4 @@
-const SUPABASE_URL = process.env.SUPABASE_URL ?? 'https://mxjxmwgndrhatzvjjsdq.supabase.co'
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://mxjxmwgndrhatzvjjsdq.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
@@ -6,19 +6,19 @@ const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
 const SUPABASE_HEADERS = {
   'Content-Type': 'application/json',
   'apikey': SUPABASE_KEY,
-  'Authorization': `Bearer ${SUPABASE_KEY}`,
+  'Authorization': 'Bearer ' + SUPABASE_KEY,
   'Prefer': 'return=representation',
 }
 
 async function supabaseQuery(path) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: SUPABASE_HEADERS })
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + path, { headers: SUPABASE_HEADERS })
   if (!res.ok) return { data: null, error: await res.text() }
   const data = await res.json()
   return { data, error: null }
 }
 
 async function supabaseInsert(table, row) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+  const res = await fetch(SUPABASE_URL + '/rest/v1/' + table, {
     method: 'POST',
     headers: SUPABASE_HEADERS,
     body: JSON.stringify(row),
@@ -44,15 +44,16 @@ async function sendTelegramMessage(chatId, text) {
     console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN is not set')
     return
   }
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+  await fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML' }),
+    body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' }),
   })
 }
 
-export const handler = async (event) => {
-  console.log('[telegram-webhook] handler invoked, method:', event.httpMethod)
+exports.handler = async function(event) {
+  console.log('[telegram-webhook] invoked, method:', event.httpMethod)
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' }
   }
@@ -65,12 +66,12 @@ export const handler = async (event) => {
   let body
   try {
     body = JSON.parse(event.body)
-  } catch {
+  } catch (e) {
     return { statusCode: 400, body: 'Bad request' }
   }
 
-  const message = body?.message
-  if (!message?.text || !message?.from) {
+  const message = body && body.message
+  if (!message || !message.text || !message.from) {
     return { statusCode: 200, body: 'OK' }
   }
 
@@ -104,12 +105,9 @@ export const handler = async (event) => {
     return { statusCode: 200, body: 'OK' }
   }
 
-  // Look up profile by telegram_user_id
-  const { data: profiles, error: profileError } = await supabaseQuery(
-    `profiles?telegram_user_id=eq.${telegramUserId}&select=id`
-  )
+  const result = await supabaseQuery('profiles?telegram_user_id=eq.' + telegramUserId + '&select=id')
 
-  if (profileError || !profiles?.length) {
+  if (result.error || !result.data || !result.data.length) {
     await sendTelegramMessage(chatId,
       '⚠️ Your Telegram is not linked to a Personal OS account.\n\n' +
       'Open your dashboard and enter your Telegram User ID: <code>' + telegramUserId + '</code>'
@@ -121,22 +119,22 @@ export const handler = async (event) => {
   const content = cleanText(rawText)
   if (!content) return { statusCode: 200, body: 'OK' }
 
-  const { error } = await supabaseInsert('notes', {
-    user_id: profiles[0].id,
-    content,
-    category,
+  const insertResult = await supabaseInsert('notes', {
+    user_id: result.data[0].id,
+    content: content,
+    category: category,
     source: 'telegram',
   })
 
-  if (error) {
-    console.error('Supabase insert error:', error)
+  if (insertResult.error) {
+    console.error('[telegram-webhook] insert error:', insertResult.error)
     await sendTelegramMessage(chatId, '❌ Failed to save note. Please try again.')
     return { statusCode: 200, body: 'OK' }
   }
 
   const emoji = category === 'business_idea' ? '💡' : '🧠'
   const label = category === 'business_idea' ? 'Business Idea' : 'Thought'
-  await sendTelegramMessage(chatId, `${emoji} Saved as <b>${label}</b>:\n<i>${content}</i>`)
+  await sendTelegramMessage(chatId, emoji + ' Saved as <b>' + label + '</b>:\n<i>' + content + '</i>')
 
   return { statusCode: 200, body: 'OK' }
 }
