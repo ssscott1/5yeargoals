@@ -23,7 +23,10 @@ function cleanText(text) {
 }
 
 async function sendTelegramMessage(chatId, text) {
-  if (!BOT_TOKEN) return
+  if (!BOT_TOKEN) {
+    console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN is not set in environment variables')
+    return
+  }
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
