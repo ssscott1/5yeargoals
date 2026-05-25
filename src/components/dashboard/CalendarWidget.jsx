@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Calendar, ExternalLink, Loader2, RefreshCw, AlertTriangle } from 'lucide-react'
 import { format, startOfDay, endOfDay, parseISO } from 'date-fns'
 
-const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
-const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY
+const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '1049857352139-u1ljka77riot8kom4teh0sq8q9ojj6bn.apps.googleusercontent.com'
+const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY ?? 'AIzaSyD2Po6PX4NGSPakVReAT_AKyXDw5jMJAQ4'
 const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly'
 
 export default function CalendarWidget() {
