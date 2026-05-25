@@ -29,9 +29,7 @@ async function supabaseInsert(table, row) {
 
 function detectCategory(text) {
   const lower = text.toLowerCase()
-  if (lower.includes('#idea') || lower.startsWith('idea:') || lower.startsWith('business:')) {
-    return 'business_idea'
-  }
+  if (lower.includes('#idea') || lower.startsWith('idea:') || lower.startsWith('business:')) return 'business_idea'
   return 'thought'
 }
 
@@ -40,10 +38,7 @@ function cleanText(text) {
 }
 
 async function sendTelegramMessage(chatId, text) {
-  if (!BOT_TOKEN) {
-    console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN is not set')
-    return
-  }
+  if (!BOT_TOKEN) { console.error('[tg-webhook] TELEGRAM_BOT_TOKEN not set'); return }
   await fetch('https://api.telegram.org/bot' + BOT_TOKEN + '/sendMessage', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -52,28 +47,18 @@ async function sendTelegramMessage(chatId, text) {
 }
 
 exports.handler = async function(event) {
-  console.log('[telegram-webhook] invoked, method:', event.httpMethod)
+  console.log('[tg-webhook] invoked:', event.httpMethod)
 
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' }
-  }
+  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' }
 
   const secret = event.headers['x-telegram-bot-api-secret-token']
-  if (WEBHOOK_SECRET && secret !== WEBHOOK_SECRET) {
-    return { statusCode: 401, body: 'Unauthorized' }
-  }
+  if (WEBHOOK_SECRET && secret !== WEBHOOK_SECRET) return { statusCode: 401, body: 'Unauthorized' }
 
   let body
-  try {
-    body = JSON.parse(event.body)
-  } catch (e) {
-    return { statusCode: 400, body: 'Bad request' }
-  }
+  try { body = JSON.parse(event.body) } catch (e) { return { statusCode: 400, body: 'Bad request' } }
 
   const message = body && body.message
-  if (!message || !message.text || !message.from) {
-    return { statusCode: 200, body: 'OK' }
-  }
+  if (!message || !message.text || !message.from) return { statusCode: 200, body: 'OK' }
 
   const telegramUserId = String(message.from.id)
   const chatId = message.chat.id
@@ -110,7 +95,7 @@ exports.handler = async function(event) {
   if (result.error || !result.data || !result.data.length) {
     await sendTelegramMessage(chatId,
       '⚠️ Your Telegram is not linked to a Personal OS account.\n\n' +
-      'Open your dashboard and enter your Telegram User ID: <code>' + telegramUserId + '</code>'
+      'Enter your Telegram User ID in the dashboard: <code>' + telegramUserId + '</code>'
     )
     return { statusCode: 200, body: 'OK' }
   }
@@ -127,7 +112,7 @@ exports.handler = async function(event) {
   })
 
   if (insertResult.error) {
-    console.error('[telegram-webhook] insert error:', insertResult.error)
+    console.error('[tg-webhook] insert error:', insertResult.error)
     await sendTelegramMessage(chatId, '❌ Failed to save note. Please try again.')
     return { statusCode: 200, body: 'OK' }
   }
