@@ -1,16 +1,32 @@
-import { createClient } from '@supabase/supabase-js'
-import ws from 'ws'
-
-const supabase = createClient(
-  process.env.SUPABASE_URL ?? 'https://mxjxmwgndrhatzvjjsdq.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { realtime: { transport: ws } }
-)
-
+const SUPABASE_URL = process.env.SUPABASE_URL ?? 'https://mxjxmwgndrhatzvjjsdq.supabase.co'
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET
 
-// Detect category from message text
+const SUPABASE_HEADERS = {
+  'Content-Type': 'application/json',
+  'apikey': SUPABASE_KEY,
+  'Authorization': `Bearer ${SUPABASE_KEY}`,
+  'Prefer': 'return=representation',
+}
+
+async function supabaseQuery(path) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: SUPABASE_HEADERS })
+  if (!res.ok) return { data: null, error: await res.text() }
+  const data = await res.json()
+  return { data, error: null }
+}
+
+async function supabaseInsert(table, row) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: SUPABASE_HEADERS,
+    body: JSON.stringify(row),
+  })
+  if (!res.ok) return { error: await res.text() }
+  return { error: null }
+}
+
 function detectCategory(text) {
   const lower = text.toLowerCase()
   if (lower.includes('#idea') || lower.startsWith('idea:') || lower.startsWith('business:')) {
@@ -19,14 +35,13 @@ function detectCategory(text) {
   return 'thought'
 }
 
-// Strip category hashtags from message
 function cleanText(text) {
   return text.replace(/#idea|#thought|#business/gi, '').trim()
 }
 
 async function sendTelegramMessage(chatId, text) {
   if (!BOT_TOKEN) {
-    console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN is not set in environment variables')
+    console.error('[telegram-webhook] TELEGRAM_BOT_TOKEN is not set')
     return
   }
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -41,7 +56,6 @@ export const handler = async (event) => {
     return { statusCode: 405, body: 'Method not allowed' }
   }
 
-  // Validate webhook secret
   const secret = event.headers['x-telegram-bot-api-secret-token']
   if (WEBHOOK_SECRET && secret !== WEBHOOK_SECRET) {
     return { statusCode: 401, body: 'Unauthorized' }
@@ -63,7 +77,6 @@ export const handler = async (event) => {
   const chatId = message.chat.id
   const rawText = message.text
 
-  // Handle /start command
   if (rawText === '/start') {
     await sendTelegramMessage(chatId,
       '👋 <b>Personal OS Bot</b>\n\n' +
@@ -77,7 +90,6 @@ export const handler = async (event) => {
     return { statusCode: 200, body: 'OK' }
   }
 
-  // Handle /help command
   if (rawText === '/help') {
     await sendTelegramMessage(chatId,
       '📋 <b>Commands</b>\n\n' +
@@ -91,30 +103,25 @@ export const handler = async (event) => {
     return { statusCode: 200, body: 'OK' }
   }
 
-  // Look up user by telegram_user_id
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('telegram_user_id', telegramUserId)
-    .single()
+  // Look up profile by telegram_user_id
+  const { data: profiles, error: profileError } = await supabaseQuery(
+    `profiles?telegram_user_id=eq.${telegramUserId}&select=id`
+  )
 
-  if (profileError || !profile) {
+  if (profileError || !profiles?.length) {
     await sendTelegramMessage(chatId,
       '⚠️ Your Telegram is not linked to a Personal OS account.\n\n' +
-      'Open your dashboard, go to Settings, and enter your Telegram User ID: <code>' + telegramUserId + '</code>'
+      'Open your dashboard and enter your Telegram User ID: <code>' + telegramUserId + '</code>'
     )
     return { statusCode: 200, body: 'OK' }
   }
 
   const category = detectCategory(rawText)
   const content = cleanText(rawText)
+  if (!content) return { statusCode: 200, body: 'OK' }
 
-  if (!content) {
-    return { statusCode: 200, body: 'OK' }
-  }
-
-  const { error } = await supabase.from('notes').insert({
-    user_id: profile.id,
+  const { error } = await supabaseInsert('notes', {
+    user_id: profiles[0].id,
     content,
     category,
     source: 'telegram',
